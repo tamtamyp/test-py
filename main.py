@@ -69,11 +69,13 @@ import psutil
 class LTFishingGUI:
     def set_styles(self):
         style = ttk.Style()
+        style.theme_use("clam")  # <<-- Đảm bảo dùng theme hỗ trợ custom font
         style.configure("Bold.TButton", font=("Arial", 10, "bold"))
+        style.configure("CustomCombobox.TCombobox", padding=(4, 6, 4, 6), font=("Arial", 10))
     def __init__(self, root):
         self.root = root
-        self.root.title("LT Fishing Python")
-        self.root.geometry("320x347")
+        self.root.title("tamtam")
+        self.root.geometry("340x347")
         self.root.configure(bg='#f4a7b9')
         self.root.iconbitmap("logo.ico")
 
@@ -95,7 +97,7 @@ class LTFishingGUI:
             return btn
 
         grid_button(0, 0, "Làm mới", self.refresh)
-        self.ld_entry = ttk.Combobox(container, state="readonly")
+        self.ld_entry = ttk.Combobox(container, state="readonly", style="CustomCombobox.TCombobox")
         self.ld_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
         grid_button(0, 2, "Kết nối", self.connect_ld)
 
@@ -103,15 +105,10 @@ class LTFishingGUI:
         grid_button(1, 1, "Bán cá", self.sell_fish)
         grid_button(1, 2, "Tạm dừng", self.stop_bot)
 
-        ttk.Label(container, text="Vị trí cần", font=("Arial", 10, "bold")).grid(row=2, column=0, columnspan=1)
-        self.slot = ttk.Combobox(container, values=["1", "2", "3", "4", "5"], state="readonly")
-        self.slot.set("1")
-        self.slot.grid(row=2, column=1, sticky="ew")
-        grid_button(2, 2, "Lọc bóng", self.filter_shadow)
+        grid_button(2, 0, "Lọc bóng", self.filter_shadow)
 
-        grid_button(3, 0, "Đặt lại", self.reset_stats)
-        grid_button(3, 1, "Khóa máy", self.lock_pc)
-        grid_button(3, 2, "Tắt máy", self.shutdown)
+        grid_button(2, 1, "Đặt lại", self.reset_stats)
+        grid_button(2, 2, "Khóa máy", self.lock_pc)
 
         stats_frame = tk.Frame(self.root, bg='#f4a7b9')
         stats_frame.pack(fill="x", padx=10, pady=(10, 0))
