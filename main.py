@@ -98,9 +98,6 @@ class LTFishingGUI:
                 hwnd = self.hwnd_map.get(selected)
                 pid = self.pid_map.get(selected)
 
-                # Gửi cả PID và hwnd vào bot nếu cần
-                self.bot.set_target_window(selected)  # có thể mở rộng thêm: hwnd, pid
-
                 print(f"[INFO] Đã chọn cửa sổ: {selected} (PID: {pid})")
                 self.stats_label.config(text=f"Đã tìm thấy game tại PID {pid}")
             else:
@@ -108,12 +105,18 @@ class LTFishingGUI:
                 self.stats_label.config(text="Không tìm thấy cửa sổ giả lập được chọn")
 
     def start_bot(self):
+        selected = self.ld_entry.get()
         if not self.bot.is_running():
             self.bot.start()
             self.thread = threading.Thread(target=self.run_bot)
             self.thread.daemon = True
             self.thread.start()
-
+            if selected:
+                hwnd = self.hwnd_map.get(selected)
+                pid = self.pid_map.get(selected)
+                # Gửi cả PID và hwnd vào bot nếu cần
+                self.bot.set_target_window(selected, hwnd)  # có thể mở rộng thêm: hwnd, pid
+                print(f"Đã chọn cửa sổ: {selected}")
     def stop_bot(self):
         self.bot.stop()
 

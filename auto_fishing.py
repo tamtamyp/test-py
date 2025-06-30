@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 import pyautogui
 import time
+from mss import mss
+from PIL import Image
 import win32gui
-from PIL import ImageGrab
 
 class AutoFishing:
     def __init__(self, template_path, threshold=0.8):
@@ -13,7 +14,8 @@ class AutoFishing:
         self.running = False
         self.success_count = 0
         self.fail_count = 0
-        self.hwnd = None  # Dùng để lưu HWND của cửa sổ giả lập
+        self.window_title = None
+        self.window_hwnd = None
 
     def start(self):
         self.running = True
@@ -24,19 +26,35 @@ class AutoFishing:
     def is_running(self):
         return self.running
 
-    def set_target_hwnd(self, hwnd):
-        self.hwnd = hwnd
+    def set_target_window(self, title, hwnd=None):
+        print(f"[ERROR] capture_game_window: {hwnd}")
+        self.window_title = title
+        self.window_hwnd = hwnd
 
-    def capture_window(self):
-        if not self.hwnd:
-            return None
+    def capture_game_window(self):
+        if not self.window_hwnd:
+            return self.capture_fullscreen()
+
         try:
-            left, top, right, bottom = win32gui.GetWindowRect(self.hwnd)
-            img = ImageGrab.grab(bbox=(left, top, right, bottom))
-            return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+            rect = win32gui.GetWindowRect(self.window_hwnd)
+            x1, y1, x2, y2 = rect
+            w, h = x2 - x1, y2 - y1
+
+            with mss() as sct:
+                monitor = {"top": y1, "left": x1, "width": w, "height": h}
+                sct_img = sct.grab(monitor)
+                img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+                return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         except Exception as e:
-            print(f"[ERROR] Capture window failed: {e}")
-            return None
+            print(f"[ERROR] capture_game_window: {e}")
+            return self.capture_fullscreen()
+
+    def capture_fullscreen(self):
+        with mss() as sct:
+            monitor = sct.monitors[1]
+            sct_img = sct.grab(monitor)
+            img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+            return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
     def find_target(self, screen):
         gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
@@ -47,17 +65,16 @@ class AutoFishing:
         return None
 
     def run_once(self):
-        screen = self.capture_window()
-        if screen is None:
-            self.fail_count += 1
-            time.sleep(0.5)
-            return
-
+        screen = self.capture_game_window()
         pos = self.find_target(screen)
         if pos:
             click_x = pos[0] + self.tw // 2
             click_y = pos[1] + self.th // 2
-            pyautogui.click(click_x, click_y)
+            if self.window_hwnd:
+                win_x, win_y, _, _ = win32gui.GetWindowRect(self.window_hwnd)
+                pyautogui.click(win_x + click_x, win_y + click_y)
+            else:
+                pyautogui.click(click_x, click_y)
             self.success_count += 1
             time.sleep(1.2)
         else:
