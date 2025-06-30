@@ -1,62 +1,3 @@
-### FILE: lt_fishing/auto_fishing.py
-import cv2
-import numpy as np
-import pyautogui
-import time
-from mss import mss
-from PIL import Image
-
-class AutoFishing:
-    def __init__(self, template_path, threshold=0.8):
-        self.template = cv2.imread(template_path, 0)
-        self.tw, self.th = self.template.shape[::-1]
-        self.threshold = threshold
-        self.running = False
-        self.success_count = 0
-        self.fail_count = 0
-        self.window_title = None
-
-    def start(self):
-        self.running = True
-
-    def stop(self):
-        self.running = False
-
-    def is_running(self):
-        return self.running
-
-    def set_target_window(self, title):
-        self.window_title = title
-
-    def capture_fullscreen(self):
-        with mss() as sct:
-            monitor = sct.monitors[1]
-            sct_img = sct.grab(monitor)
-            img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-            return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-
-    def find_target(self, screen):
-        gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
-        res = cv2.matchTemplate(gray, self.template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-        if max_val >= self.threshold:
-            return max_loc
-        return None
-
-    def run_once(self):
-        screen = self.capture_fullscreen()
-        pos = self.find_target(screen)
-        if pos:
-            click_x = pos[0] + self.tw // 2
-            click_y = pos[1] + self.th // 2
-            pyautogui.click(click_x, click_y)
-            self.success_count += 1
-            time.sleep(1.2)
-        else:
-            self.fail_count += 1
-        time.sleep(0.5)
-
-### FILE: lt_fishing/main.py
 import tkinter as tk
 from tkinter import ttk
 import threading
@@ -137,7 +78,7 @@ class LTFishingGUI:
                         return
 
                     # Nhận diện các emulator thật (LDPlayer, MEmu, LdBox...)
-                    if any(em in name for em in ["ldplayer", "ldconsole", "ldbox", "memu"]):
+                    if any(em in name for em in ["ldplayer", "memu"]):
                         title = win32gui.GetWindowText(hwnd)
                         if title:
                             result.append((title, hwnd, pid))

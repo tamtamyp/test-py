@@ -1,10 +1,9 @@
-### FILE: lt_fishing/auto_fishing.py
 import cv2
 import numpy as np
 import pyautogui
 import time
-from mss import mss
-from PIL import Image
+import win32gui
+from PIL import ImageGrab
 
 class AutoFishing:
     def __init__(self, template_path, threshold=0.8):
@@ -14,7 +13,7 @@ class AutoFishing:
         self.running = False
         self.success_count = 0
         self.fail_count = 0
-        self.window_title = None
+        self.hwnd = None  # Dùng để lưu HWND của cửa sổ giả lập
 
     def start(self):
         self.running = True
@@ -25,15 +24,19 @@ class AutoFishing:
     def is_running(self):
         return self.running
 
-    def set_target_window(self, title):
-        self.window_title = title
+    def set_target_hwnd(self, hwnd):
+        self.hwnd = hwnd
 
-    def capture_fullscreen(self):
-        with mss() as sct:
-            monitor = sct.monitors[1]
-            sct_img = sct.grab(monitor)
-            img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+    def capture_window(self):
+        if not self.hwnd:
+            return None
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(self.hwnd)
+            img = ImageGrab.grab(bbox=(left, top, right, bottom))
             return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            print(f"[ERROR] Capture window failed: {e}")
+            return None
 
     def find_target(self, screen):
         gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
@@ -44,7 +47,12 @@ class AutoFishing:
         return None
 
     def run_once(self):
-        screen = self.capture_fullscreen()
+        screen = self.capture_window()
+        if screen is None:
+            self.fail_count += 1
+            time.sleep(0.5)
+            return
+
         pos = self.find_target(screen)
         if pos:
             click_x = pos[0] + self.tw // 2
@@ -55,170 +63,3 @@ class AutoFishing:
         else:
             self.fail_count += 1
         time.sleep(0.5)
-
-### FILE: lt_fishing/main.py
-import tkinter as tk
-from tkinter import ttk
-import threading
-import time
-from auto_fishing import AutoFishing
-import win32gui
-import win32process
-import psutil
-
-class LTFishingGUI:
-    def set_styles(self):
-        style = ttk.Style()
-        style.configure("Bold.TButton", font=("Arial", 10, "bold"))
-    def __init__(self, root):
-        self.root = root
-        self.root.title("LT Fishing Python")
-        self.root.geometry("320x347")
-        self.root.configure(bg='#f4a7b9')
-        self.root.iconbitmap("logo.ico")
-
-        self.bot = AutoFishing("template.png")
-        self.thread = None
-
-        self.build_ui()
-        self.set_styles()
-        self.update_stats()
-        self.refresh()
-
-    def build_ui(self):
-        container = tk.Frame(self.root, bg='#f4a7b9')
-        container.pack(pady=10)
-
-        def grid_button(row, col, text, cmd=None, colspan=1):
-            btn = ttk.Button(container, text=text, command=cmd or (lambda: print(text, style="Bold.TButton")))
-            btn.grid(row=row, column=col, columnspan=colspan, padx=5, pady=5, sticky="ew")
-            return btn
-
-        grid_button(0, 0, "Làm mới", self.refresh)
-        self.ld_entry = ttk.Combobox(container, state="readonly")
-        self.ld_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        grid_button(0, 2, "Kết nối", self.connect_ld)
-
-        grid_button(1, 0, "Bắt đầu", self.start_bot)
-        grid_button(1, 1, "Bán cá", self.sell_fish)
-        grid_button(1, 2, "Tạm dừng", self.stop_bot)
-
-        ttk.Label(container, text="Vị trí cần", font=("Arial", 10, "bold")).grid(row=2, column=0, columnspan=1)
-        self.slot = ttk.Combobox(container, values=["1", "2", "3", "4", "5"], state="readonly")
-        self.slot.set("1")
-        self.slot.grid(row=2, column=1, sticky="ew")
-        grid_button(2, 2, "Lọc bóng", self.filter_shadow)
-
-        grid_button(3, 0, "Đặt lại", self.reset_stats)
-        grid_button(3, 1, "Khóa máy", self.lock_pc)
-        grid_button(3, 2, "Tắt máy", self.shutdown)
-
-        grid_button(4, 0, "Báo lỗi")
-        grid_button(4, 1, "Ủng hộ", self.support)
-
-        self.stats_label = tk.Label(self.root, text="", bg='#f4a7b9', font=("Arial", 10, "bold"))
-        self.stats_label.pack(pady=0)
-
-        # Thêm khu vực hiển thị thống kê thời gian, thành công, thất bại
-        self.info_frame = tk.Frame(self.root, bg='#f4a7b9')
-        self.info_frame.pack(pady=2)
-
-        self.time_label = tk.Label(self.info_frame, text="00:00:00", bg='#f4a7b9', font=("Arial", 10, "bold"))
-        self.time_label.grid(row=0, column=0, padx=5)
-        self.filtered_label = tk.Label(self.info_frame, text="Đã lọc  0", bg='#f4a7b9', font=("Arial", 10, "bold"))
-        self.filtered_label.grid(row=0, column=1, padx=5)
-
-        self.result_frame = tk.Frame(self.root, bg='#f4a7b9')
-        self.result_frame.pack(pady=2)
-
-        self.success_label = tk.Label(self.result_frame, text="Thành công  0", bg='#f4a7b9', font=("Arial", 10, "bold"))
-        self.success_label.grid(row=0, column=0, padx=5)
-        self.fail_label = tk.Label(self.result_frame, text="Thất bại  0", bg='#f4a7b9', font=("Arial", 10, "bold"))
-        self.fail_label.grid(row=0, column=1, padx=5)
-
-        # Vùng màu
-        self.color_frame = tk.Frame(self.root, bg='#f4a7b9')
-        self.color_frame.pack(pady=2)
-        colors = ["white", "lightgreen", "cyan", "violet", "mediumpurple", "gold"]
-        for i, color in enumerate(colors):
-            tk.Label(self.color_frame, text="0", bg=color, width=4, font=("Arial", 10, "bold")).grid(row=0, column=i, padx=1)
-
-    def refresh(self):
-        self.ld_entry.set("")
-        self.stats_label.config(text="Đang chờ...")
-        titles = []
-
-        def enum_handler(hwnd, result):
-            if win32gui.IsWindowVisible(hwnd):
-                _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                try:
-                    process = psutil.Process(pid)
-                    name = process.name().lower()
-                    if any(em in name for em in ["ldplayer", "ldconsole", "ldbox", "memu"]):
-                        title = win32gui.GetWindowText(hwnd)
-                        if title:
-                            result.append(title)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-
-        win32gui.EnumWindows(enum_handler, titles)
-
-        win32gui.EnumWindows(enum_handler, titles)
-        self.ld_entry['values'] = titles
-        if titles:
-            self.ld_entry.set(titles[0])
-        else:
-            self.ld_entry.set("")
-
-    def connect_ld(self):
-        selected = self.ld_entry.get()
-        if selected:
-            self.bot.set_target_window(selected)
-            print(f"[INFO] Đã chọn cửa sổ: {selected}")
-            self.stats_label.config(text=f"Đã tìm thấy game tại cửa sổ: {selected}")
-        else:
-            print("[WARN] Không có cửa sổ giả lập được chọn")
-            self.stats_label.config(text="Không tìm thấy cửa sổ giả lập được chọn")
-
-    def start_bot(self):
-        if not self.bot.is_running():
-            self.bot.start()
-            self.thread = threading.Thread(target=self.run_bot)
-            self.thread.daemon = True
-            self.thread.start()
-
-    def stop_bot(self):
-        self.bot.stop()
-
-    def sell_fish(self):
-        print("[INFO] Bán cá tự động chưa được cài")
-
-    def filter_shadow(self):
-        print("[INFO] Lọc bóng cá chưa được cài")
-
-    def reset_stats(self):
-        self.bot.success_count = 0
-        self.bot.fail_count = 0
-
-    def lock_pc(self):
-        print("[INFO] Khóa máy chưa được cài")
-
-    def support(self):
-        import webbrowser
-        webbrowser.open("https://www.buymeacoffee.com")
-
-    def shutdown(self):
-        print("[INFO] Tắt máy chưa được cài")
-
-    def run_bot(self):
-        while self.bot.is_running():
-            self.bot.run_once()
-
-    def update_stats(self):
-        self.stats_label.config(text=f"Thành công: {self.bot.success_count}\nThất bại: {self.bot.fail_count}")
-        self.root.after(1000, self.update_stats)
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = LTFishingGUI(root)
-    root.mainloop()
