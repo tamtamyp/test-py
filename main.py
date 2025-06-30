@@ -113,15 +113,19 @@ class LTFishingGUI:
         grid_button(3, 1, "Khóa máy", self.lock_pc)
         grid_button(3, 2, "Tắt máy", self.shutdown)
 
-        grid_button(4, 0, "Báo lỗi")
-        grid_button(4, 1, "Ủng hộ", self.support)
+        stats_frame = tk.Frame(self.root, bg='#f4a7b9')
+        stats_frame.pack(fill="x", padx=10, pady=(10, 0))
 
-        self.stats_label = tk.Label(self.root, text="", bg='#f4a7b9', font=("Arial", 12, "bold"))
-        self.stats_label.pack(pady=10)
+        self.stats_label = tk.Label(stats_frame, text="", bg='#f4a7b9', font=("Arial", 10), anchor="w")
+        self.stats_label.pack(anchor="w")
+
+        self.stats_label2 = tk.Label(stats_frame, text="", bg='#f4a7b9', font=("Arial", 10), anchor="w")
+        self.stats_label2.pack(anchor="w", pady=(5, 0))
 
     def refresh(self):
         self.ld_entry.set("")
         self.stats_label.config(text="Đang chờ...")
+        self.stats_label2.config(text="Đang chờ...")
         titles = []
 
         def enum_handler(hwnd, result):
@@ -130,31 +134,40 @@ class LTFishingGUI:
                 try:
                     process = psutil.Process(pid)
                     name = process.name().lower()
+
+                    # Bỏ qua trình quản lý MEmu
+                    if name in ["memumanage.exe", "memumanager.exe"]:
+                        return
+
+                    # Nhận diện các emulator thật (LDPlayer, MEmu, LdBox...)
                     if any(em in name for em in ["ldplayer", "ldconsole", "ldbox", "memu"]):
                         title = win32gui.GetWindowText(hwnd)
                         if title:
-                            result.append(title)
+                            result.append((title, hwnd, pid))
+
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
 
         win32gui.EnumWindows(enum_handler, titles)
-
-        win32gui.EnumWindows(enum_handler, titles)
-        self.ld_entry['values'] = titles
-        if titles:
-            self.ld_entry.set(titles[0])
-        else:
-            self.ld_entry.set("")
+        title_list = [title for title, hwnd, pid in titles]
+        self.hwnd_map = {title: hwnd for title, hwnd, pid in titles}
+        self.pid_map = {title: pid for title, hwnd, pid in titles}
+        self.ld_entry['values'] = [""] + title_list
 
     def connect_ld(self):
-        selected = self.ld_entry.get()
-        if selected:
-            self.bot.set_target_window(selected)
-            print(f"[INFO] Đã chọn cửa sổ: {selected}")
-            self.stats_label.config(text=f"Đã tìm thấy game tại cửa sổ: {selected}")
-        else:
-            print("[WARN] Không có cửa sổ giả lập được chọn")
-            self.stats_label.config(text="Không tìm thấy cửa sổ giả lập được chọn")
+            selected = self.ld_entry.get()
+            if selected:
+                hwnd = self.hwnd_map.get(selected)
+                pid = self.pid_map.get(selected)
+
+                # Gửi cả PID và hwnd vào bot nếu cần
+                self.bot.set_target_window(selected)  # có thể mở rộng thêm: hwnd, pid
+
+                print(f"[INFO] Đã chọn cửa sổ: {selected} (PID: {pid})")
+                self.stats_label.config(text=f"Đã tìm thấy game tại PID {pid}")
+            else:
+                print("[WARN] Không có cửa sổ giả lập được chọn")
+                self.stats_label.config(text="Không tìm thấy cửa sổ giả lập được chọn")
 
     def start_bot(self):
         if not self.bot.is_running():
@@ -191,7 +204,8 @@ class LTFishingGUI:
             self.bot.run_once()
 
     def update_stats(self):
-        self.stats_label.config(text=f"Thành công: {self.bot.success_count}\nThất bại: {self.bot.fail_count}")
+        # self.stats_label.config(text=f"Thành công: {self.bot.success_count}")
+        # self.stats_label2.config(text=f"Thất bại: {self.bot.fail_count}")
         self.root.after(1000, self.update_stats)
 
 if __name__ == "__main__":
